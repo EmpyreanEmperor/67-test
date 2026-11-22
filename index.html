@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>67</title>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0d1117;
+      color: #ffffff;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 3rem;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  i love 67
+
+  <script>
+    // Fixed Hub ID so your app always knows where to connect (or pass ?id=custom in URL)
+    const HUB_ID = new URLSearchParams(window.location.search).get("id") || "i-love-67-hub";
+    const STORAGE_KEY = "hub_stored_messages";
+
+    // Helper: Read & Write storable data in localStorage
+    function getStoredData() {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    }
+
+    function saveData(direction, payload) {
+      const history = getStoredData();
+      history.push({ direction, payload, time: Date.now() });
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+    }
+
+    // Background PeerJS connection (App <-> Website)
+    const peer = new Peer(HUB_ID);
+    const connections = [];
+
+    peer.on("open", (id) => {
+      console.log("[Background Hub Online] ID:", id);
+    });
+
+    peer.on("connection", (conn) => {
+      connections.push(conn);
+
+      conn.on("data", (data) => {
+        // 1. Store incoming app data
+        saveData("app_to_web", data);
+
+        // 2. If the app asks for stored history, send it back
+        if (data && data.action === "get_history") {
+          const reply = { action: "history", data: getStoredData() };
+          conn.send(reply);
+          saveData("web_to_app", reply);
+          return;
+        }
+
+        // 3. Default background reply from website -> app
+        const response = { status: "ok", phrase: "i love 67", received: data };
+        conn.send(response);
+        saveData("web_to_app", response);
+      });
+    });
+
+    // Also supports background iframe/window postMessage
+    window.addEventListener("message", (event) => {
+      saveData("app_to_web", event.data);
+      const response = { status: "ok", phrase: "i love 67", history: getStoredData() };
+      if (event.source) event.source.postMessage(response, "*");
+      saveData("web_to_app", response);
+    });
+
+    // Global helper you can call from browser console or another script: window.sendToApp({ msg: "yo" })
+    window.sendToApp = (msg) => {
+      saveData("web_to_app", msg);
+      connections.forEach((c) => c.open && c.send(msg));
+    };
+  </script>
+</body>
+</html>
